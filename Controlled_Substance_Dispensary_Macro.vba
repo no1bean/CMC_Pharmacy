@@ -41,7 +41,7 @@ Sub UpdateNoColumn(ByRef worksheet As Worksheet)
         Dim dataArray() As Variant
         dataArray = .Range(.Cells(startRow, 1), .Cells(endRow, 1)).Value
         For rowCounter = LBound(dataArray, 1) To UBound(dataArray, 1)
-            dataArray(rowCounter, 1) = rowCounter - startRow + 1
+            dataArray(rowCounter, 1) = rowCounter - startRow + 2
         Next rowCounter
         .Range(.Cells(startRow, 1), .Cells(endRow, 1)).Value = dataArray
     End With
@@ -61,7 +61,7 @@ End Sub
 Sub 집계표만들기()
 '
 ' 집계표만들기 매크로
-' 첫번째 : 부분합 출력미리보기 두번째 : 호스피스용 병실 순 출력미리보기 ver240203
+' 첫번째 : 부분합 출력미리보기 두번째 : 호스피스용 병실 순 출력미리보기
 '
 ' 바로 가기 키: Ctrl+Shift+P
 '
@@ -194,3 +194,4 @@ Sub 집계표만들기()
     End If
 
 End Sub
+
