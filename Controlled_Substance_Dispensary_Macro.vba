@@ -1,19 +1,10 @@
-' Function to convert column number to column letter
 Function ColLetter(colNum As Long) As String
-    Dim vArr
-    vArr = Split(Cells(1, colNum).Address(True, False), "$")
-    ColLetter = vArr(0)
+    ColLetter = Replace(Cells(1, colNum).Address(False, False), 1, "")
 End Function
 
-' Function to find a column number based on a header name in the first row
 Function FindColumn(ws As Worksheet, headerName As String) As Long
     Dim foundCell As Range
-    Dim searchRange As Range
-
-    ' Define the search range based on the used range of the worksheet
-    Set searchRange = ws.Range(ws.Cells(1, 1), ws.Cells(1, ws.UsedRange.Columns.Count))
-
-    Set foundCell = searchRange.Find(What:=headerName, LookIn:=xlValues, LookAt:=xlWhole)
+    Set foundCell = ws.Rows(1).Find(What:=headerName, LookIn:=xlValues, LookAt:=xlWhole, MatchCase:=False)
     
     If Not foundCell Is Nothing Then
         FindColumn = foundCell.Column
@@ -22,41 +13,40 @@ Function FindColumn(ws As Worksheet, headerName As String) As Long
     End If
 End Function
 
-' Subroutine to delete rows in a specified worksheet based on a given criteria in a specified column
-Sub DeleteRowsWithCriteria(ws As Worksheet, headerName As String, criteria As String)
-    Dim colNum As Long
-    Dim colLetterStr As String
+Sub DeleteRowsWithCriteria(targetSheet As Worksheet, headerName As String, criteria As String)
+    Dim columnNumber As Long
+    Dim columnLetter As String
     
-    colNum = FindColumn(ws, headerName)
-    If colNum <> 0 Then
-        colLetterStr = ColLetter(colNum)
-        ws.Columns(colLetterStr & ":" & colLetterStr).AutoFilter Field:=1, Criteria1:=criteria
-        If ws.AutoFilterMode Then
-            ws.AutoFilter.Range.Offset(1, 0).SpecialCells(xlCellTypeVisible).EntireRow.Delete
-        End If
-        ws.AutoFilterMode = False
+    columnNumber = FindColumn(targetSheet, headerName)
+    If columnNumber <> 0 Then
+        columnLetter = ColLetter(columnNumber)
+        With targetSheet.Columns(columnLetter & ":" & columnLetter)
+            .AutoFilter Field:=1, Criteria1:=criteria
+            If .Parent.AutoFilterMode Then
+                .Parent.AutoFilter.Range.Offset(1, 0).SpecialCells(xlCellTypeVisible).EntireRow.Delete
+            End If
+            .Parent.AutoFilterMode = False
+        End With
     End If
 End Sub
 
-' Subroutine to update the 'No' column with sequential numbers
-Sub UpdateNoColumn(ByRef ws As Worksheet)
-    Dim i As Long
+Sub UpdateNoColumn(ByRef worksheet As Worksheet)
+    Dim rowCounter As Long
     Dim endRow As Long
     Dim startRow As Long
-    startRow = 2 ' Initialize startRow to 2 since numbering starts after the header row
+    startRow = 2
     
-    With ws
+    With worksheet
         endRow = .Cells(.Rows.Count, "A").End(xlUp).Row
         Dim dataArray() As Variant
         dataArray = .Range(.Cells(startRow, 1), .Cells(endRow, 1)).Value
-        For i = LBound(dataArray, 1) To UBound(dataArray, 1)
-            dataArray(i, 1) = i - startRow + 1
-        Next i
+        For rowCounter = LBound(dataArray, 1) To UBound(dataArray, 1)
+            dataArray(rowCounter, 1) = rowCounter - startRow + 1
+        Next rowCounter
         .Range(.Cells(startRow, 1), .Cells(endRow, 1)).Value = dataArray
     End With
 End Sub
 
-' Subroutine to configure page setup settings for a worksheet
 Sub ConfigurePageSettings(ws As Worksheet)
     With ws.PageSetup
         .Orientation = xlLandscape
@@ -82,22 +72,17 @@ Sub 집계표만들기()
 
     Call DeleteRowsWithCriteria(ws, "반환상태", "반환종료")
           
-    ' Find the cell containing "총량" in the first row
     colTotal = FindColumn(ws, "총량")
 
-    ' Assuming colTotal is correctly set to the cell containing "총량"
     Dim startColToDelete As Long
     startColToDelete = colTotal + 2
 
-    ' Convert column number to letter
     Dim startColLetter As String
     startColLetter = ColLetter(startColToDelete)
 
     ' Delete columns from startColLetter to the end
     ws.Columns(startColLetter & ":" & ColLetter(ws.UsedRange.Columns.Count)).Delete
      
-       
-    
     ' Find columns "No", "처방일자", and "투약번호"
     Dim colNo As Long, colPrescriptionDate As Long, colMedicationNo As Long
     colNo = FindColumn(ws, "No")
@@ -114,15 +99,11 @@ Sub 집계표만들기()
     If colPrescriptionDate < colMedicationNo - 1 Then
         ws.Columns(ColLetter(colPrescriptionDate + 1) & ":" & ColLetter(colMedicationNo - 1)).Delete
     End If
-    
-    
-    
           
     ' Find the columns with "약품명" and "총량" in the first row
     Dim colDrugName As Long
-    
-
     colDrugName = FindColumn(ws, "약품명")
+
     colTotal = FindColumn(ws, "총량")
 
     ' Sort the data based on the found columns
@@ -166,8 +147,6 @@ Sub 집계표만들기()
 
     ' Showing the print preview page with settings applied
     Call ConfigurePageSettings(ws)
-
-        
         
     Dim colDepartment As Long
     Dim departmentValue As String
@@ -184,14 +163,11 @@ Sub 집계표만들기()
     departmentValue = ws.Cells(2, colDepartment).Value
 
     If departmentValue = "호스피스완화의료병동" Then
-        
 
     ' Remove any existing subtotals
     Dim dataRange As Range
     Set dataRange = ws.UsedRange
     dataRange.RemoveSubtotal
-
-
 
     ' Sort by the "병실" column
     Dim colRoom As Long
