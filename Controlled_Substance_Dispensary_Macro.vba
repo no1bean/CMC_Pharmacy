@@ -1,105 +1,147 @@
-Function ColLetter(colNum As Long) As String
-    ColLetter = Replace(Cells(1, colNum).Address(False, False), 1, "")
+Function CopySheet(sourceSheet As Worksheet, ByVal nameSuffix As String) As Worksheet
+    Dim newSheet As Worksheet
+    Dim baseName As String
+    Dim newSheetName As String
+    Dim counter As Integer
+    
+    sourceSheet.Copy After:=Sheets(Sheets.Count)
+    Set newSheet = ActiveSheet
+    
+    baseName = sourceSheet.Name & nameSuffix
+    newSheetName = baseName
+
+    counter = 1
+    While SheetExists(newSheetName)
+        newSheetName = baseName & counter
+        counter = counter + 1
+    Wend
+    
+    newSheet.Name = newSheetName
+    Set CopySheet = newSheet
 End Function
 
-Function FindColumn(ws As Worksheet, headerName As String) As Long
-    Dim foundCell As Range
-    Set foundCell = ws.Rows(1).Find(What:=headerName, LookIn:=xlValues, LookAt:=xlWhole, MatchCase:=False)
-    
-    If Not foundCell Is Nothing Then
-        FindColumn = foundCell.Column
-    Else
-        FindColumn = 0 ' Return 0 or handle error if header is not found
-    End If
+
+Function SheetExists(sheetName As String) As Boolean
+    On Error Resume Next
+    Dim sheet As Object
+    Set sheet = ThisWorkbook.Sheets(sheetName)
+    SheetExists = Not sheet Is Nothing
+    On Error GoTo 0
 End Function
 
-Sub DeleteRowsWithCriteria(targetSheet As Worksheet, headerName As String, criteria As String)
-    Dim columnNumber As Long
-    Dim columnLetter As String
-    
-    columnNumber = FindColumn(targetSheet, headerName)
-    If columnNumber <> 0 Then
-        columnLetter = ColLetter(columnNumber)
-        With targetSheet.Columns(columnLetter & ":" & columnLetter)
-            .AutoFilter Field:=1, Criteria1:=criteria
-            If .Parent.AutoFilterMode Then
-                .Parent.AutoFilter.Range.Offset(1, 0).SpecialCells(xlCellTypeVisible).EntireRow.Delete
-            End If
-            .Parent.AutoFilterMode = False
-        End With
-    End If
-End Sub
 
-Sub UpdateNoColumn(ByRef worksheet As Worksheet)
-    Dim rowCounter As Long
-    Dim endRow As Long
-    Dim startRow As Long
-    startRow = 2
-    
-    With worksheet
-        endRow = .Cells(.Rows.Count, "A").End(xlUp).Row
-        Dim dataArray() As Variant
-        dataArray = .Range(.Cells(startRow, 1), .Cells(endRow, 1)).Value
-        For rowCounter = LBound(dataArray, 1) To UBound(dataArray, 1)
-            dataArray(rowCounter, 1) = rowCounter - startRow + 2
-        Next rowCounter
-        .Range(.Cells(startRow, 1), .Cells(endRow, 1)).Value = dataArray
-    End With
-End Sub
-
-Sub ConfigurePageSettings(ws As Worksheet)
-    With ws.PageSetup
-        .Orientation = xlLandscape
-        .PaperSize = xlPaperA5
-        .Zoom = False
-        .FitToPagesWide = 1
-        .FitToPagesTall = False
-    End With
-    ws.PrintPreview
-End Sub
+Function IsInArray(value As Variant, arr As Variant) As Boolean
+    Dim i As Integer
+    For i = LBound(arr) To UBound(arr)
+        If arr(i) = value Then
+            IsInArray = True
+            Exit Function
+        End If
+    Next i
+    IsInArray = False
+End Function
 
 Sub 집계표만들기()
 '
 ' 집계표만들기 매크로
-' 첫번째 : 부분합 출력미리보기 두번째 : 호스피스용 병실 순 출력미리보기
-'
+' 첫번째 : 부분합 출력미리보기 
+' 두번째 : 호스피스용 병실 순 출력미리보기
 ' 바로 가기 키: Ctrl+Shift+P
 '
-    Dim ws As Worksheet
-    Dim colTotal As Long
+    Dim ws As worksheet
+    Set ws = CopySheet(ActiveSheet,"-집계표")
 
-    Set ws = ActiveSheet
+    Call ClearExcessRowsAndColumns(ws)
+    With ws
+        ' Set the font and font size for all cells
+        .Cells.Font.Name = "Dotum"
+        .Cells.Font.Size = 9
+
+        ' Set borders for all cells in the used range
+        With .UsedRange.Borders
+            .LineStyle = xlContinuous
+            .Color = vbBlack
+            .Weight = xlThin
+        End With
+
+        ' Auto-fit row height for all rows in the used range
+        .UsedRange.Rows.RowHeight=23.2
+    End With
 
     Call DeleteRowsWithCriteria(ws, "반환상태", "반환종료")
-          
-    colTotal = FindColumn(ws, "총량")
+    
+    ' Define the desired order of the columns
+    Dim arrColumnOrder As Variant
+    arrColumnOrder = Array("No", "처방일자", "투약번호", "처방구분", "수행부서", "병실", "환자번호", "환자명", "연령", "약픔코드", "약품명", "총량")
+    
+    Dim dictMergeInfo As Object
+    Set dictMergeInfo = CreateObject("Scripting.Dictionary")
+    Dim i As Integer
+    Dim colNum As Long
+    Dim rngCell As Range
 
-    Dim startColToDelete As Long
-    startColToDelete = colTotal + 2
+    ' Store merge information for headers of interest and unmerge those cells
+    For i = LBound(arrColumnOrder) To UBound(arrColumnOrder)
+        Set rngCell = ws.Rows(1).Find(What:=arrColumnOrder(i), LookIn:=xlValues, LookAt:=xlWhole, MatchCase:=False)
+        If Not rngCell Is Nothing Then
+            colNum = rngCell.Column
+            If rngCell.MergeCells Then
+                ' Store the number of merged columns
+                dictMergeInfo(colNum) = rngCell.MergeArea.Columns.Count
+                ' Unmerge the cells
+                rngCell.MergeArea.UnMerge
+            Else
+                ' If not merged, just store 1
+                dictMergeInfo(colNum) = 1
+            End If
+        End If
+    Next i
+    ' Rearrange the columns based on arrColumnOrder
+    Dim targetColNum As Long
+    Dim currentColNum As Long
+    Dim colRange As Range
 
-    Dim startColLetter As String
-    startColLetter = ColLetter(startColToDelete)
+    targetColNum = 1 ' Start from the first column
 
-    ' Delete columns from startColLetter to the end
-    ws.Columns(startColLetter & ":" & ColLetter(ws.UsedRange.Columns.Count)).Delete
-     
-    ' Find columns "No", "처방일자", and "투약번호"
-    Dim colNo As Long, colPrescriptionDate As Long, colMedicationNo As Long
-    colNo = FindColumn(ws, "No")
-    colPrescriptionDate = FindColumn(ws, "처방일자")
+    For i = LBound(arrColumnOrder) To UBound(arrColumnOrder)
+        currentColNum = FindColumn(ws, arrColumnOrder(i)) ' Find the current position of the column
 
-    ' Delete columns between "No" and "처방일자"
-    If colNo < colPrescriptionDate - 1 Then
-        ws.Columns(ColLetter(colNo + 1) & ":" & ColLetter(colPrescriptionDate - 1)).Delete
-        colPrescriptionDate = FindColumn(ws, "처방일자")
+        If currentColNum > 0 And currentColNum <> targetColNum Then
+            ' Handle merged columns
+            Dim mergeSpan As Long
+            If dictMergeInfo.Exists(currentColNum) Then
+                mergeSpan = dictMergeInfo(currentColNum)
+            Else
+                mergeSpan = 1
+            End If
+
+            ' Select and cut the entire column or columns (in case of a merged header)
+            Set colRange = ws.Columns(currentColNum).Resize(, mergeSpan)
+            colRange.Cut
+            ws.Columns(targetColNum).Insert Shift:=xlToRight
+            Application.CutCopyMode = False ' Clear the clipboard
+
+            ' Update the target position
+            targetColNum = targetColNum + mergeSpan
+        ElseIf currentColNum > 0 Then
+            ' Update the target position if column is already in the correct place
+            targetColNum = targetColNum + dictMergeInfo(currentColNum)
+        End If
+    Next i
+
+' Reapply the merges based on the original merge information
+Dim header As Variant
+For Each header In arrColumnOrder
+    colNum = FindColumn(ws, header) ' Get the new column number after rearrangement
+    If dictMergeInfo.Exists(colNum) Then
+        mergeSpan = dictMergeInfo(colNum)
+        If mergeSpan > 1 Then
+            ws.Range(ws.Cells(1, colNum), ws.Cells(1, colNum + mergeSpan - 1)).Merge
+        End If
     End If
+Next header
 
-    ' Delete columns between "처방일자" and "투약번호"
-    colMedicationNo = FindColumn(ws, "투약번호")
-    If colPrescriptionDate < colMedicationNo - 1 Then
-        ws.Columns(ColLetter(colPrescriptionDate + 1) & ":" & ColLetter(colMedicationNo - 1)).Delete
-    End If
-          
+
     ' Find the columns with "약품명" and "총량" in the first row
     Dim colDrugName As Long
     colDrugName = FindColumn(ws, "약품명")
@@ -109,17 +151,13 @@ Sub 집계표만들기()
     ' Sort the data based on the found columns
     With ws.Sort
         .SortFields.Clear
-        ' Adding "약품명" column to sort (ascending)
         .SortFields.Add Key:=Cells(1, colDrugName), Order:=xlAscending
-        ' Adding "총량" column to sort (descending)
         .SortFields.Add Key:=Cells(1, colTotal), Order:=xlDescending
 
-        .SetRange ws.UsedRange ' Setting the range to the used range of the worksheet
-        .Header = xlYes ' The first row contains headers
-        .Apply ' Applying the sort
+        .SetRange ws.UsedRange
+        .Header = xlYes
+        .Apply
     End With
-        
-    Call UpdateNoColumn(ws)
 
     ' Find the column with "약품명" after all operations that might shift columns
     Dim colSubtotalGroupBy As Long
@@ -140,58 +178,151 @@ Sub 집계표만들기()
         MsgBox """약품명"" column not found. Cannot apply subtotal.", vbExclamation
         Exit Sub ' Or handle the error appropriately
     End If
+        
+    Dim wardColumnNumber as Long
+    Dim hospiceCount As Long
 
+    wardColumnNumber = FindColumn(ws,"수행부서")
+    hospiceCount = Application.WorksheetFunction.CountIf( _
+               ws.Range(ws.Cells(2, wardColumnNumber), _
+               ws.Cells(ws.UsedRange.Rows.Count, wardColumnNumber)), _
+               "호스피스완화의료병동")
+
+    If hospiceCount = ws.UsedRange.Rows.Count - 1 Then
+        Dim roomOrderSheet As Worksheet
+        Set roomOrderSheet = CopySheet(ws,"-병실순")
+
+        With roomOrderSheet.Sort
+            .SortFields.Clear
+            .SortFields.Add Key:=roomOrderSheet.Cells(1, FindColumn(roomOrderSheet, "병실")), Order:=xlAscending
+            .SetRange roomOrderSheet.UsedRange
+            .Header = xlYes
+            .Apply
+        End With
+
+        Call UpdateNoColumn(roomOrderSheet)
+        MsgBox "먼저 호스피스완화의료병동 병실순 출력화면입니다.", vbExclamation
+        Call ConfigurePageSettings(roomOrderSheet)
+    ElseIf hospiceCount > 0 And hospiceCount < ws.UsedRange.Rows.Count - 1 Then
+        MsgBox "수행부서에 호스피스완화의료병동과 다른 부서가 섞여있습니다. 병동순 출력은 되지 않습니다.", vbExclamation
+    End If
+
+    Call UpdateNoColumn(ws)
     ' Apply subtotal
     ws.UsedRange.Subtotal GroupBy:=colSubtotalGroupBy, Function:=xlSum, TotalList:=Array(colTotal), _
         Replace:=True, PageBreaks:=False, SummaryBelowData:=True
-
-    ' Showing the print preview page with settings applied
-    Call ConfigurePageSettings(ws)
-        
-    Dim colDepartment As Long
-    Dim departmentValue As String
-
-    ' Find the column number for "수행부서"
-    For Each headerCell In ws.Range("1:1")
-        If headerCell.Value = "수행부서" Then
-            colDepartment = headerCell.Column
-            Exit For
-        End If
-    Next headerCell
-
-    ' Check the value in the second row of the "수행부서" column
-    departmentValue = ws.Cells(2, colDepartment).Value
-
-    If departmentValue = "호스피스완화의료병동" Then
-
-    ' Remove any existing subtotals
-    Dim dataRange As Range
-    Set dataRange = ws.UsedRange
-    dataRange.RemoveSubtotal
-
-    ' Sort by the "병실" column
-    Dim colRoom As Long
-    For Each headerCell In ws.Range("1:1")
-        If headerCell.Value = "병실" Then
-            colRoom = headerCell.Column
-            Exit For
-        End If
-    Next headerCell
-
-    With ws.Sort
-        .SortFields.Clear
-        .SortFields.Add Key:=Cells(1, colRoom), Order:=xlAscending
-        .SetRange ws.UsedRange
-        .Header = xlYes
-        .Apply
-    End With
-
-    Call UpdateNoColumn(ws)
-
-    ' Showing the print preview page with settings applied for "병실" sorting
+    MsgBox "약물별 집계표 출력화면입니다.", vbExclamation
     Call ConfigurePageSettings(ws)
 
+End Sub
+
+Sub ClearExcessRowsAndColumns(ws As Worksheet)
+    Dim lastUsedRow As Long, lastUsedCol As Long
+    Dim lastShapeRow As Long, lastShapeCol As Long
+    Dim usedRange As Range, areaRange As Range
+    Dim shape As Shape
+
+    If ActiveWorkbook Is Nothing Then Exit Sub
+
+    If ws.ProtectContents Or ws.ProtectDrawingObjects Or ws.ProtectScenarios Then ws.Unprotect ""
+
+    On Error Resume Next
+    Set usedRange = ws.UsedRange
+    Set areaRange = Union(usedRange.SpecialCells(xlCellTypeConstants), usedRange.SpecialCells(xlCellTypeFormulas))
+    If Not areaRange Is Nothing Then
+        lastUsedRow = areaRange.Rows(areaRange.Rows.Count).Row
+        lastUsedCol = areaRange.Columns(areaRange.Columns.Count).Column
+    End If
+
+    ' If lastUsedRow and lastUsedCol are still 0, set them to the last row and column of usedRange
+    If lastUsedRow = 0 Then lastUsedRow = usedRange.Rows(usedRange.Rows.Count).Row
+    If lastUsedCol = 0 Then lastUsedCol = usedRange.Columns(usedRange.Columns.Count).Column
+
+    For Each shape In ws.Shapes
+        lastShapeRow = shape.BottomRightCell.Row
+        lastShapeCol = shape.BottomRightCell.Column
+        If lastShapeCol > lastUsedCol Then lastUsedCol = lastShapeCol
+        If lastShapeRow > lastUsedRow Then lastUsedRow = lastShapeRow
+    Next shape
+
+    If lastUsedRow < ws.Rows.Count Then
+        With ws.Rows(lastUsedRow + 1 & ":" & ws.Rows.Count)
+            .Hidden = False
+            .Clear
+        End With
+    End If
+
+    If lastUsedCol < ws.Columns.Count Then
+        With ws.Columns(lastUsedCol + 1 & ":" & ws.Columns.Count)
+            .Hidden = False
+            .Clear
+        End With
     End If
 
 End Sub
 
+Function ColLetter(colNum As Long) As String
+    ColLetter = Replace(Cells(1, colNum).Address(False, False), 1, "")
+End Function
+
+Function FindColumn(ws As worksheet, ByVal headerName As String) As Long
+    Dim foundCell As Range
+    Set foundCell = ws.Rows(1).Find(What:=headerName, LookIn:=xlValues, LookAt:=xlWhole, MatchCase:=False)
+    
+    If Not foundCell Is Nothing Then
+        FindColumn = foundCell.Column
+    Else
+        FindColumn = 0 ' Return 0 or handle error if header is not found
+    End If
+End Function
+
+Sub DeleteRowsWithCriteria(ws As worksheet, headerName As String, criteria As String)
+    Dim columnNumber As Long
+    Dim columnLetter As String
+    
+    columnNumber = FindColumn(ws, headerName)
+    If columnNumber <> 0 Then
+        columnLetter = ColLetter(columnNumber)
+        With ws.Columns(columnLetter & ":" & columnLetter)
+            .AutoFilter Field:=1, Criteria1:=criteria
+            If .Parent.AutoFilterMode Then
+                .Parent.AutoFilter.Range.Offset(1, 0).SpecialCells(xlCellTypeVisible).EntireRow.Delete
+            End If
+            .Parent.AutoFilterMode = False
+        End With
+    End If
+End Sub
+
+Sub UpdateNoColumn(ws As Worksheet)
+    Dim startRow As Long
+    startRow = 2
+
+    With ws
+        Dim dataRange As Range
+        Dim dataArray() As Variant
+        Dim i As Long
+
+        Set dataRange = .Range("A" & startRow & ":A" & .Cells(.Rows.Count, "A").End(xlUp).Row)
+        dataArray = dataRange.Value
+
+        For i = LBound(dataArray, 1) To UBound(dataArray, 1)
+            dataArray(i, 1) = i + 1
+        Next i
+
+        dataRange.Value = dataArray
+    End With
+End Sub
+
+Sub ConfigurePageSettings(ws As worksheet)
+    ' Configure page settings
+    With ws.PageSetup
+        .Orientation = xlLandscape
+        .PaperSize = xlPaperA5
+        .Zoom = False
+        .FitToPagesWide = 1
+        .FitToPagesTall = False
+    End With
+
+    ' Show print preview
+    ws.PrintPreview
+End Sub
