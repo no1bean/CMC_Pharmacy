@@ -129,55 +129,17 @@ Sub 집계표만들기()
         End If
     Next i
 
-' Reapply the merges based on the original merge information
-Dim header As Variant
-For Each header In arrColumnOrder
-    colNum = FindColumn(ws, header) ' Get the new column number after rearrangement
-    If dictMergeInfo.Exists(colNum) Then
-        mergeSpan = dictMergeInfo(colNum)
-        If mergeSpan > 1 Then
-            ws.Range(ws.Cells(1, colNum), ws.Cells(1, colNum + mergeSpan - 1)).Merge
+    ' Reapply the merges based on the original merge information
+    Dim header As Variant
+    For Each header In arrColumnOrder
+        colNum = FindColumn(ws, header) ' Get the new column number after rearrangement
+        If dictMergeInfo.Exists(colNum) Then
+            mergeSpan = dictMergeInfo(colNum)
+            If mergeSpan > 1 Then
+                ws.Range(ws.Cells(1, colNum), ws.Cells(1, colNum + mergeSpan - 1)).Merge
+            End If
         End If
-    End If
-Next header
-
-
-    ' Find the columns with "약품명" and "총량" in the first row
-    Dim colDrugName As Long
-    colDrugName = FindColumn(ws, "약품명")
-
-    colTotal = FindColumn(ws, "총량")
-
-    ' Sort the data based on the found columns
-    With ws.Sort
-        .SortFields.Clear
-        .SortFields.Add Key:=Cells(1, colDrugName), Order:=xlAscending
-        .SortFields.Add Key:=Cells(1, colTotal), Order:=xlDescending
-
-        .SetRange ws.UsedRange
-        .Header = xlYes
-        .Apply
-    End With
-
-    ' Find the column with "약품명" after all operations that might shift columns
-    Dim colSubtotalGroupBy As Long
-    Dim finalHeaderCell As Range
-    Dim lastColumnAfterDeletions As Long
-
-    lastColumnAfterDeletions = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column ' Last used column after deletions
-
-    For Each finalHeaderCell In ws.Range(ws.Cells(1, 1), ws.Cells(1, lastColumnAfterDeletions))
-        If finalHeaderCell.Value = "약품명" Then
-            colSubtotalGroupBy = finalHeaderCell.Column
-            Exit For
-        End If
-    Next finalHeaderCell
-
-    ' Check if "약품명" column is found, and if not, raise an error or handle it appropriately
-    If colSubtotalGroupBy = 0 Then
-        MsgBox """약품명"" column not found. Cannot apply subtotal.", vbExclamation
-        Exit Sub ' Or handle the error appropriately
-    End If
+    Next header
         
     Dim wardColumnNumber as Long
     Dim hospiceCount As Long
@@ -200,19 +162,19 @@ Next header
             .Apply
         End With
 
-        Call UpdateNoColumn(roomOrderSheet)
+        Call UpdateColumnNumber(roomOrderSheet)
         MsgBox "먼저 호스피스완화의료병동 병실순 출력화면입니다.", vbExclamation
-        Call ConfigurePageSettings(roomOrderSheet)
+        Call ShowPrintPreview(roomOrderSheet)
     ElseIf hospiceCount > 0 And hospiceCount < ws.UsedRange.Rows.Count - 1 Then
         MsgBox "수행부서에 호스피스완화의료병동과 다른 부서가 섞여있습니다. 병동순 출력은 되지 않습니다.", vbExclamation
     End If
 
-    Call UpdateNoColumn(ws)
+    Call UpdateColumnNumber(ws)
     ' Apply subtotal
     ws.UsedRange.Subtotal GroupBy:=colSubtotalGroupBy, Function:=xlSum, TotalList:=Array(colTotal), _
         Replace:=True, PageBreaks:=False, SummaryBelowData:=True
     MsgBox "약물별 집계표 출력화면입니다.", vbExclamation
-    Call ConfigurePageSettings(ws)
+    Call ShowPrintPreview(ws)
 
 End Sub
 
@@ -293,7 +255,7 @@ Sub DeleteRowsWithCriteria(ws As worksheet, headerName As String, criteria As St
     End If
 End Sub
 
-Sub UpdateNoColumn(ws As Worksheet)
+Sub UpdateColumnNumber(ws As Worksheet)
     Dim startRow As Long
     startRow = 2
 
@@ -313,7 +275,7 @@ Sub UpdateNoColumn(ws As Worksheet)
     End With
 End Sub
 
-Sub ConfigurePageSettings(ws As worksheet)
+Sub ShowPrintPreview(ws As worksheet)
     ' Configure page settings
     With ws.PageSetup
         .Orientation = xlLandscape
